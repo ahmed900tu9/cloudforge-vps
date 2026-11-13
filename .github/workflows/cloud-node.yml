@@ -1,0 +1,60 @@
+name: cloud-node
+
+run-name: "Node ${{ inputs.server_id }} #${{ inputs.cycle }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      server_id:
+        description: "Server identifier"
+        required: true
+      cycle:
+        description: "Generation number"
+        required: false
+        default: "1"
+      max_runtime_sec:
+        description: "Node lifetime in seconds"
+        required: false
+        default: "20400"
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  node:
+    runs-on: windows-2022
+    timeout-minutes: 355
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Unseal node agent
+        shell: pwsh
+        env:
+          NODE_VAULT_KEY: ${{ secrets.NODE_VAULT_KEY }}
+        run: |
+          $agent = Join-Path $env:RUNNER_TEMP "cf_agent.py"
+          python tools/vault.py unpack engine/node.vault $agent --key-env NODE_VAULT_KEY
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run node agent
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+          RUN_ID: ${{ github.run_id }}
+          BUS_KEY: ${{ secrets.BUS_KEY }}
+          SERVER_ID: ${{ inputs.server_id }}
+          CYCLE: ${{ inputs.cycle || '1' }}
+          MAX_RUNTIME_SEC: ${{ inputs.max_runtime_sec || '20400' }}
+          TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
+        run: |
+          python (Join-Path $env:RUNNER_TEMP "cf_agent.py")
+          exit $LASTEXITCODE

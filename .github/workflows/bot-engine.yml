@@ -1,0 +1,76 @@
+name: bot-engine
+
+run-name: "Engine ${{ inputs.cycle || 'auto' }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_runtime_sec:
+        description: "Engine lifetime in seconds"
+        required: false
+        default: "20700"
+      cycle:
+        description: "Generation number"
+        required: false
+        default: "1"
+  schedule:
+    - cron: "*/15 * * * *"
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  engine:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Gate scheduled start
+        id: gate
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SELF_RUN: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          count=$(gh run list --repo "$REPO" --workflow bot-engine.yml --limit 20 --json databaseId,status \
+            | python3 -c 'import json,os,sys; me=int(os.environ["SELF_RUN"]); rows=json.load(sys.stdin); print(sum(1 for r in rows if r["databaseId"]!=me and r["status"] in ("in_progress","queued","waiting","requested","pending")))')
+          if [ "$count" -gt 0 ]; then
+            echo "run=0" >> "$GITHUB_OUTPUT"
+            echo "engine already active ($count run(s)); skipping"
+          else
+            echo "run=1" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Unseal engine
+        if: github.event_name != 'schedule' || steps.gate.outputs.run == '1'
+        env:
+          CLOUDBOT_VAULT_KEY: ${{ secrets.CLOUDBOT_VAULT_KEY }}
+        run: |
+          set -euo pipefail
+          rm -rf bot common
+          python3 tools/vault.py unpack-dir engine/core.vault . --key-env CLOUDBOT_VAULT_KEY
+
+      - name: Run engine
+        if: github.event_name != 'schedule' || steps.gate.outputs.run == '1'
+        env:
+          CLOUDBOT_TOKEN: ${{ secrets.CLOUDBOT_TOKEN }}
+          CLOUDBOT_OWNER_ID: ${{ secrets.CLOUDBOT_OWNER_ID }}
+          BUS_KEY: ${{ secrets.BUS_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          MAX_RUNTIME_SEC: ${{ inputs.max_runtime_sec || '20700' }}
+          CYCLE: ${{ inputs.cycle || '1' }}
+        run: python3 -m bot.main
