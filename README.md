@@ -2,7 +2,8 @@
 
 Self-hosted Windows RDP/SSH builder bot. A Telegram engine on GitHub Actions
 provisions short-lived `windows-2022` runners and keeps them reachable through
-`bore` and a Cloudflare quick tunnel.
+a self-hosted FRP/KCP TCP+UDP relay, with `bore` and a Cloudflare quick tunnel
+as fallbacks.
 
 ## What it is
 
@@ -22,6 +23,8 @@ gh secret set CLOUDBOT_OWNER_ID     # your Telegram user id
 gh secret set BUS_KEY               # asset encryption key
 gh secret set CLOUDBOT_VAULT_KEY    # engine vault key
 gh secret set NODE_VAULT_KEY        # node vault key
+gh secret set FRP_TOKEN             # prompt for the relay token
+gh variable set FRP_SERVER --body x.x.x.x
 ```
 
 3. Open Actions and run `bot-engine` once manually.
