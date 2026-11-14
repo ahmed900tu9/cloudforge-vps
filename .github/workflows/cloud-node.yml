@@ -55,8 +55,6 @@ jobs:
           CYCLE: ${{ inputs.cycle || '1' }}
           MAX_RUNTIME_SEC: ${{ inputs.max_runtime_sec || '20400' }}
           TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
-          FRP_SERVER: ${{ vars.FRP_SERVER }}
-          FRP_TOKEN: ${{ secrets.FRP_TOKEN }}
         run: |
           python (Join-Path $env:RUNNER_TEMP "cf_agent.py")
           exit $LASTEXITCODE
